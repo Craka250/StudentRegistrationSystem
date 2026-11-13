@@ -1,0 +1,29 @@
+
+# Maven build output
+target/
+build/
+dist/
+
+# NetBeans private configuration
+nbproject/private/
+nbbuild/
+nbdist/
+
+# Other IDE configuration
+.idea/
+*.iml
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Compiled Java files
+*.class
+
+# Operating system files
+.DS_Store
+Thumbs.db

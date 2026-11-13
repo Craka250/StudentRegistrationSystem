@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import ke.ac.kyu.srms.model.Programme;
+import ke.ac.kyu.srms.model.Department;
+
 public class DashboardPanel extends JPanel {
 
     private final MainFrame mainFrame;
@@ -44,31 +47,24 @@ public class DashboardPanel extends JPanel {
      * Refreshes all dashboard statistics using the central student list.
      */
     public void updateStatistics(List<Student> students) {
+        updateStatistics(students, List.of(), List.of());
+    }
 
+    public void updateStatistics(
+            List<Student> students,
+            List<Programme> programmes,
+            List<Department> departments
+    ) {
         if (students == null) {
             students = List.of();
         }
 
-        Set<String> programmes = new HashSet<>();
-        Set<String> departments = new HashSet<>();
+        if (programmes == null) {
+            programmes = List.of();
+        }
 
-        for (Student student : students) {
-
-            if (student == null) {
-                continue;
-            }
-
-            if (student.getProgramme() != null
-                    && !student.getProgramme().isBlank()) {
-
-                programmes.add(normalize(student.getProgramme()));
-            }
-
-            if (student.getDepartment() != null
-                    && !student.getDepartment().isBlank()) {
-
-                departments.add(normalize(student.getDepartment()));
-            }
+        if (departments == null) {
+            departments = List.of();
         }
 
         LocalDate today = LocalDate.now();
@@ -78,10 +74,7 @@ public class DashboardPanel extends JPanel {
                 ? today.getYear()
                 : today.getYear() - 1;
 
-        LocalDate startDate = LocalDate.of(
-                academicYearStart, 9, 1
-        );
-
+        LocalDate startDate = LocalDate.of(academicYearStart, 9, 1);
         LocalDate endDate = startDate.plusYears(1).minusDays(1);
 
         long newRegistrations = students.stream()
@@ -93,21 +86,10 @@ public class DashboardPanel extends JPanel {
                 )
                 .count();
 
-        totalStudentsValue.setText(
-                String.valueOf(students.size())
-        );
-
-        programmesValue.setText(
-                String.valueOf(programmes.size())
-        );
-
-        newRegistrationsValue.setText(
-                String.valueOf(newRegistrations)
-        );
-
-        departmentsValue.setText(
-                String.valueOf(departments.size())
-        );
+        totalStudentsValue.setText(String.valueOf(students.size()));
+        programmesValue.setText(String.valueOf(programmes.size()));
+        departmentsValue.setText(String.valueOf(departments.size()));
+        newRegistrationsValue.setText(String.valueOf(newRegistrations));
 
         newRegistrationsDescription.setText(
                 "Academic Year " + academicYearStart

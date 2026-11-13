@@ -35,6 +35,13 @@ import javax.swing.JOptionPane;
 public class StudentRegistrationPanel extends JPanel {
 
     private final MainFrame mainFrame;
+    
+    // Student editing mode
+    private Student editingStudent;
+    private JLabel headerTitle;
+    private JLabel headerSubtitle;
+    private JButton clearButton;
+    private JButton validateButton;
 
     // Personal information
     private JTextField registrationField;
@@ -49,6 +56,8 @@ public class StudentRegistrationPanel extends JPanel {
     private JTextField phoneField;
 
     // Academic information
+    private boolean refreshingAcademicOptions = false;
+    
     private JComboBox<String> programmeBox;
     private JComboBox<String> departmentBox;
     private JComboBox<Integer> yearBox;
@@ -105,19 +114,19 @@ public class StudentRegistrationPanel extends JPanel {
                 new BoxLayout(headingPanel, BoxLayout.Y_AXIS)
         );
 
-        JLabel title = new JLabel("Student Registration");
-        title.setFont(ThemeManager.FONT_SUBHEADING);
-        title.setForeground(ThemeManager.TEXT_PRIMARY);
+        headerTitle = new JLabel("Student Registration");
+        headerTitle.setFont(ThemeManager.FONT_SUBHEADING);
+        headerTitle.setForeground(ThemeManager.TEXT_PRIMARY);
 
-        JLabel subtitle = new JLabel(
+        headerSubtitle = new JLabel(
                 "Register a new student and capture their academic details."
         );
-        subtitle.setFont(ThemeManager.FONT_REGULAR);
-        subtitle.setForeground(ThemeManager.TEXT_SECONDARY);
+        headerSubtitle.setFont(ThemeManager.FONT_REGULAR);
+        headerSubtitle.setForeground(ThemeManager.TEXT_SECONDARY);
 
-        headingPanel.add(title);
+        headingPanel.add(headerTitle);
         headingPanel.add(Box.createVerticalStrut(5));
-        headingPanel.add(subtitle);
+        headingPanel.add(headerSubtitle);
 
         JButton backButton = new JButton(
                 FontIcon.of(
@@ -514,29 +523,20 @@ public class StudentRegistrationPanel extends JPanel {
 
         JPanel grid = createFieldGrid();
 
-        programmeBox = new JComboBox<>(
-                new String[]{
-                    "Select programme",
-                    "Bachelor of Software Engineering",
-                    "Bachelor of Computer Science",
-                    "Bachelor of Information Technology",
-                    "Bachelor of Business Information Technology",
-                    "Diploma in Information Technology",
-                    "Other"
-                }
-        );
-
+        programmeBox = new JComboBox<>();
         departmentBox = new JComboBox<>();
 
         yearBox = new JComboBox<>(
                 new Integer[]{null, 1, 2, 3, 4, 5, 6}
         );
 
-        resetDepartments();
+        programmeBox.addActionListener(e -> {
+            if (!refreshingAcademicOptions) {
+                filterDepartments();
+            }
+        });
 
-        programmeBox.addActionListener(
-                e -> filterDepartments()
-        );
+        refreshAcademicOptions();
 
         addField(grid, 0, 0, "Academic Programme *", programmeBox);
         addField(grid, 0, 1, "Department *", departmentBox);
@@ -548,44 +548,87 @@ public class StudentRegistrationPanel extends JPanel {
     }
 
     private void resetDepartments() {
+        if (departmentBox == null) {
+            return;
+        }
+
         departmentBox.removeAllItems();
         departmentBox.addItem("Select department");
         departmentBox.addItem("Select a programme first");
         departmentBox.setSelectedIndex(0);
+
+        updateProgress();
     }
 
+    /**
+     * Loads programmes from MainFrame instead of hardcoding them.
+     */
+    public void refreshAcademicOptions() {
+        if (programmeBox == null || departmentBox == null) {
+            return;
+        }
+
+        String previousSelection =
+                (String) programmeBox.getSelectedItem();
+
+        refreshingAcademicOptions = true;
+
+        try {
+            programmeBox.removeAllItems();
+            programmeBox.addItem("Select programme");
+
+            for (String programmeName : mainFrame.getProgrammeNames()) {
+                programmeBox.addItem(programmeName);
+            }
+
+            int selectedIndex = 0;
+
+            if (previousSelection != null) {
+                for (int i = 1; i < programmeBox.getItemCount(); i++) {
+                    if (programmeBox.getItemAt(i).equals(previousSelection)) {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            programmeBox.setSelectedIndex(selectedIndex);
+
+        } finally {
+            refreshingAcademicOptions = false;
+        }
+
+        filterDepartments();
+    }
+
+    /**
+     * Displays the department currently assigned to the selected programme.
+     */
     private void filterDepartments() {
+        if (programmeBox == null || departmentBox == null) {
+            return;
+        }
+
         String programme = (String) programmeBox.getSelectedItem();
 
         departmentBox.removeAllItems();
         departmentBox.addItem("Select department");
 
-        if (programme == null
-                || programme.equals("Select programme")) {
+        if (programme == null || programme.equals("Select programme")) {
             departmentBox.addItem("Select a programme first");
 
-        } else if (
-                programme.equals("Bachelor of Software Engineering")
-                || programme.equals("Bachelor of Computer Science")
-                || programme.equals("Bachelor of Information Technology")
-                || programme.equals("Diploma in Information Technology")
-        ) {
-            departmentBox.addItem(
-                    "Computing and Information Technology"
-            );
-
-        } else if (
-                programme.equals(
-                        "Bachelor of Business Information Technology"
-                )
-        ) {
-            departmentBox.addItem("Business and Management");
-
         } else {
-            departmentBox.addItem("Other");
+            String department =
+                    mainFrame.getDepartmentNameForProgramme(programme);
+
+            if (department == null || department.isBlank()) {
+                departmentBox.addItem("No department assigned");
+            } else {
+                departmentBox.addItem(department);
+                departmentBox.setSelectedIndex(1);
+            }
         }
 
-        departmentBox.setSelectedIndex(0);
         updateProgress();
     }
 
@@ -907,7 +950,161 @@ public class StudentRegistrationPanel extends JPanel {
             validateComponent(component);
         }
     }
+    
+        /**
+        * Loads an existing student into the registration form
+        * and switches the panel into edit mode.
+        */
+       public void loadStudentForEditing(Student student) {
 
+           if (student == null) {
+               JOptionPane.showMessageDialog(
+                       this,
+                       "No student was selected for editing.",
+                       "Edit Student",
+                       JOptionPane.WARNING_MESSAGE
+               );
+               return;
+           }
+
+           editingStudent = student;
+
+           // Personal information
+           registrationField.setText(student.getRegistrationNumber());
+           firstNameField.setText(student.getFirstName());
+           middleNameField.setText(student.getMiddleName());
+           lastNameField.setText(student.getLastName());
+
+           genderBox.setSelectedItem(student.getGender());
+
+           dateOfBirthPicker.setDate(student.getDateOfBirth());
+
+           // Contact information
+           emailField.setText(student.getEmail());
+           phoneField.setText(student.getPhoneNumber());
+
+           // Academic information
+           refreshAcademicOptions();
+
+           programmeBox.setSelectedItem(student.getProgramme());
+
+           filterDepartments();
+
+           departmentBox.setSelectedItem(student.getDepartment());
+
+           yearBox.setSelectedItem(student.getYearOfStudy());
+
+           // Admission information
+           admissionDatePicker.setDate(student.getAdmissionDate());
+
+           // Student photos are not currently stored in the Student model.
+           // Therefore, the existing photo cannot be preloaded here.
+           removeStudentPhoto();
+
+           // Clear previous validation messages.
+           for (JLabel label : errorLabels.values()) {
+               label.setText(" ");
+           }
+
+           // Change the form heading.
+           headerTitle.setText("Edit Student Information");
+
+           headerSubtitle.setText(
+                   "Update the student's personal, contact and academic details."
+           );
+
+           // Change action button labels.
+           clearButton.setText("Cancel Editing");
+
+           validateButton.setText("Review Changes");
+
+           statusLabel.setText(
+                   "Editing student: " + student.getRegistrationNumber()
+           );
+
+           statusLabel.setForeground(ThemeManager.PRIMARY);
+
+           updateProgress();
+
+           // Bring the registration number into view.
+           registrationField.requestFocusInWindow();
+       }
+       
+    /**
+    * Cancels editing and returns the form to new-registration mode.
+    */
+   private void cancelEditing() {
+
+       int choice = JOptionPane.showConfirmDialog(
+               this,
+               "Are you sure you want to cancel editing?\n"
+               + "Any unsaved changes will be discarded.",
+               "Cancel Student Editing",
+               JOptionPane.YES_NO_OPTION,
+               JOptionPane.QUESTION_MESSAGE
+       );
+
+       if (choice != JOptionPane.YES_OPTION) {
+           return;
+       }
+
+       editingStudent = null;
+
+       clearFormFields();
+
+       headerTitle.setText("Student Registration");
+
+       headerSubtitle.setText(
+               "Register a new student and capture their academic details."
+       );
+
+       clearButton.setText("Clear Form");
+
+       validateButton.setText("Validate Details");
+
+       statusLabel.setText("Ready for registration.");
+
+       statusLabel.setForeground(ThemeManager.TEXT_SECONDARY);
+
+       mainFrame.showPage("students");
+   }
+   
+   /**
+    * Resets all form fields without displaying a confirmation dialog.
+    */
+   private void clearFormFields() {
+
+       registrationField.setText("");
+       firstNameField.setText("");
+       middleNameField.setText("");
+       lastNameField.setText("");
+
+       genderBox.setSelectedIndex(0);
+
+       dateOfBirthPicker.setDate(LocalDate.of(2000, 1, 1));
+
+       emailField.setText("");
+       phoneField.setText("");
+
+       refreshAcademicOptions();
+
+       programmeBox.setSelectedIndex(0);
+
+       resetDepartments();
+
+       yearBox.setSelectedIndex(0);
+
+       admissionDatePicker.setDate(LocalDate.now());
+
+       removeStudentPhoto();
+
+       for (JLabel label : errorLabels.values()) {
+           label.setText(" ");
+       }
+
+       updateProgress();
+   }
+   
     private JPanel createActionSection() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
@@ -917,7 +1114,7 @@ public class StudentRegistrationPanel extends JPanel {
         );
         buttons.setOpaque(false);
 
-        JButton clearButton = new JButton(
+        clearButton = new JButton(
                 "Clear Form",
                 FontIcon.of(
                         FontAwesomeSolid.ERASER,
@@ -926,7 +1123,7 @@ public class StudentRegistrationPanel extends JPanel {
                 )
         );
 
-        JButton validateButton = new JButton(
+        validateButton = new JButton(
                 "Validate Details",
                 FontIcon.of(
                         FontAwesomeSolid.CHECK_CIRCLE,
@@ -941,7 +1138,14 @@ public class StudentRegistrationPanel extends JPanel {
         clearButton.setToolTipText("Clear all registration fields.");
         validateButton.setToolTipText("Validate the registration information.");
 
-        clearButton.addActionListener(e -> confirmClear());
+        clearButton.addActionListener(e -> {
+            if (editingStudent != null) {
+                cancelEditing();
+            } else {
+                confirmClear();
+            }
+        });
+
         validateButton.addActionListener(e -> validateAndPreview());
 
         validateButton.setBackground(ThemeManager.PRIMARY);
@@ -1040,11 +1244,14 @@ public class StudentRegistrationPanel extends JPanel {
         }
 
         if (component == departmentBox) {
-            if (departmentBox.getSelectedIndex() == 0
+            if (departmentBox.getSelectedIndex() != 1
                     || departmentBox.getSelectedItem() == null
                     || departmentBox.getSelectedItem()
-                            .equals("Select a programme first")) {
-                return "Please select a department.";
+                            .equals("Select a programme first")
+                    || departmentBox.getSelectedItem()
+                            .equals("No department assigned")) {
+
+                return "Please select a valid programme with an assigned department.";
             }
         }
 
@@ -1188,7 +1395,46 @@ public class StudentRegistrationPanel extends JPanel {
                 SwingUtilities.getWindowAncestor(this),
                 student,
                 selectedPhotoFile,
-                confirmedStudent -> mainFrame.addStudent(confirmedStudent)
+                confirmedStudent -> {
+
+                    // Normal new-student registration.
+                    if (editingStudent == null) {
+                        return mainFrame.addStudent(confirmedStudent);
+                    }
+
+                    // Update the existing student.
+                    boolean updated = mainFrame.updateStudent(
+                            editingStudent.getRegistrationNumber(),
+                            confirmedStudent
+                    );
+
+                    if (updated) {
+
+                        editingStudent = null;
+
+                        clearFormFields();
+
+                        headerTitle.setText("Student Registration");
+
+                        headerSubtitle.setText(
+                                "Register a new student and capture their academic details."
+                        );
+
+                        clearButton.setText("Clear Form");
+
+                        validateButton.setText("Validate Details");
+
+                        statusLabel.setText(
+                                "Student information updated successfully."
+                        );
+
+                        statusLabel.setForeground(ThemeManager.SUCCESS);
+
+                        mainFrame.showPage("students");
+                    }
+
+                    return updated;
+                }
         );
 
         reviewDialog.setVisible(true);

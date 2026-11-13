@@ -7,301 +7,167 @@ import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 
 public class SidebarPanel extends JPanel {
 
     private final MainFrame mainFrame;
 
-    private JButton activeButton;
-
     public SidebarPanel(MainFrame mainFrame) {
-
         this.mainFrame = mainFrame;
 
+        setLayout(new BorderLayout());
+        setBackground(ThemeManager.SIDEBAR);
         setPreferredSize(new Dimension(245, 0));
 
-        setBackground(ThemeManager.SIDEBAR);
-
-        setLayout(new BorderLayout());
-
-        add(createBrandSection(), BorderLayout.NORTH);
-
-        add(createNavigationSection(), BorderLayout.CENTER);
-
+        add(createBrandPanel(), BorderLayout.NORTH);
+        add(createNavigationPanel(), BorderLayout.CENTER);
         add(createFooter(), BorderLayout.SOUTH);
     }
 
-    private JPanel createBrandSection() {
-
+    private JPanel createBrandPanel() {
         JPanel panel = new JPanel();
-
-        panel.setOpaque(false);
-
-        panel.setLayout(
-                new BoxLayout(panel, BoxLayout.Y_AXIS)
-        );
-
-        panel.setBorder(
-                BorderFactory.createEmptyBorder(
-                        30, 22, 30, 22
-                )
-        );
+        panel.setBackground(ThemeManager.SIDEBAR);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(27, 22, 30, 15));
 
         JLabel brand = new JLabel("SRMS");
-
-        brand.setFont(new Font(
-                "Segoe UI", Font.BOLD, 27
-        ));
-
+        brand.setFont(new Font("Segoe UI", Font.BOLD, 25));
         brand.setForeground(Color.WHITE);
 
-        JLabel subtitle = new JLabel(
-                "STUDENT MANAGEMENT"
-        );
-
-        subtitle.setFont(new Font(
-                "Segoe UI", Font.BOLD, 10
-        ));
-
-        subtitle.setForeground(
-                new Color(148, 163, 184)
-        );
+        JLabel subtitle = new JLabel("STUDENT MANAGEMENT");
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 9));
+        subtitle.setForeground(new Color(148, 163, 184));
 
         panel.add(brand);
-
         panel.add(Box.createVerticalStrut(5));
-
         panel.add(subtitle);
 
         return panel;
     }
 
-    private JPanel createNavigationSection() {
-
+    private JPanel createNavigationPanel() {
         JPanel panel = new JPanel();
+        panel.setBackground(ThemeManager.SIDEBAR);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(5, 12, 10, 12));
 
-        panel.setOpaque(false);
-
-        panel.setLayout(
-                new BoxLayout(panel, BoxLayout.Y_AXIS)
-        );
-
-        panel.setBorder(
-                BorderFactory.createEmptyBorder(
-                        5, 12, 10, 12
-                )
-        );
-
-        JLabel sectionTitle = new JLabel("MAIN MENU");
-
-        sectionTitle.setForeground(
-                new Color(148, 163, 184)
-        );
-
-        sectionTitle.setFont(new Font(
-                "Segoe UI", Font.BOLD, 10
-        ));
-
-        sectionTitle.setBorder(
-                BorderFactory.createEmptyBorder(
-                        10, 12, 15, 0
-                )
-        );
-
-        sectionTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        panel.add(sectionTitle);
+        addSectionLabel(panel, "OVERVIEW");
 
         addNavigationButton(
-                panel,
-                "Dashboard",
-                FontAwesomeSolid.HOME,
-                "dashboard",
-                true
+                panel, "Dashboard", FontAwesomeSolid.HOME, "dashboard"
+        );
+
+        addSectionLabel(panel, "STUDENT RECORDS");
+
+        addNavigationButton(
+                panel, "Students", FontAwesomeSolid.USERS, "students"
         );
 
         addNavigationButton(
-                panel,
-                "Students",
-                FontAwesomeSolid.USERS,
-                "students",
-                false
+                panel, "Register Student", FontAwesomeSolid.USER_PLUS,
+                "registration"
+        );
+
+        addSectionLabel(panel, "ACADEMIC STRUCTURE");
+
+        addNavigationButton(
+                panel, "Programmes", FontAwesomeSolid.BOOK_OPEN,
+                "programmes"
         );
 
         addNavigationButton(
-                panel,
-                "Register Student",
-                FontAwesomeSolid.USER_PLUS,
-                "registration",
-                false
+                panel, "Departments", FontAwesomeSolid.BUILDING,
+                "departments"
+        );
+
+        addSectionLabel(panel, "SYSTEM");
+
+        addNavigationButton(
+                panel, "Reports", FontAwesomeSolid.CHART_LINE, "reports"
         );
 
         addNavigationButton(
-                panel,
-                "Reports",
-                FontAwesomeSolid.CHART_LINE,
-                "reports",
-                false
-        );
-
-        addNavigationButton(
-                panel,
-                "Settings",
-                FontAwesomeSolid.COG,
-                "settings",
-                false
+                panel, "Settings", FontAwesomeSolid.COG, "settings"
         );
 
         return panel;
+    }
+
+    private void addSectionLabel(JPanel panel, String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        label.setForeground(new Color(148, 163, 184));
+        label.setBorder(new EmptyBorder(18, 10, 9, 0));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        panel.add(label);
     }
 
     private void addNavigationButton(
-            JPanel container,
+            JPanel panel,
             String text,
             FontAwesomeSolid iconCode,
-            String page,
-            boolean selected
+            String page
     ) {
-
-        JButton button = new JButton(text);
-
-        button.setIcon(
-                FontIcon.of(
-                        iconCode,
-                        18,
-                        new Color(203, 213, 225)
-                )
+        JButton button = new JButton(
+                text,
+                FontIcon.of(iconCode, 16, new Color(203, 213, 225))
         );
 
+        button.setFont(ThemeManager.FONT_MEDIUM);
+        button.setForeground(new Color(203, 213, 225));
+        button.setBackground(ThemeManager.SIDEBAR);
         button.setHorizontalAlignment(SwingConstants.LEFT);
-
-        button.setIconTextGap(15);
-
-        button.setFont(ThemeManager.FONT_REGULAR);
-
-        button.setForeground(Color.WHITE);
-
-        button.setBackground(
-                selected
-                        ? ThemeManager.PRIMARY
-                        : ThemeManager.SIDEBAR
-        );
-
-        button.setBorder(
-                BorderFactory.createEmptyBorder(
-                        13, 14, 13, 12
-                )
-        );
-
+        button.setIconTextGap(14);
         button.setFocusPainted(false);
-
-        button.setOpaque(true);
-
-        button.setMaximumSize(
-                new Dimension(Integer.MAX_VALUE, 48)
-        );
-
+        button.setBorder(new EmptyBorder(12, 13, 12, 10));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        button.setCursor(
-                Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        );
+        button.addActionListener(e -> mainFrame.showPage(page));
 
-        button.addActionListener(e -> {
-
-            if (activeButton != null) {
-
-                activeButton.setBackground(
-                        ThemeManager.SIDEBAR
-                );
-            }
-
-            activeButton = button;
-
-            button.setBackground(ThemeManager.PRIMARY);
-
-            mainFrame.showPage(page);
-        });
-
-        button.addMouseListener(new MouseAdapter() {
-
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mouseEntered(MouseEvent e) {
-
-                if (button != activeButton) {
-
-                    button.setBackground(
-                            ThemeManager.SIDEBAR_HOVER
-                    );
-                }
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                button.setBackground(ThemeManager.SIDEBAR_HOVER);
             }
 
             @Override
-            public void mouseExited(MouseEvent e) {
-
-                if (button != activeButton) {
-
-                    button.setBackground(
-                            ThemeManager.SIDEBAR
-                    );
-                }
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                button.setBackground(ThemeManager.SIDEBAR);
             }
         });
 
-        container.add(button);
-
-        container.add(Box.createVerticalStrut(7));
-
-        if (selected) {
-            activeButton = button;
-        }
+        panel.add(button);
+        panel.add(Box.createVerticalStrut(3));
     }
 
     private JPanel createFooter() {
+        JPanel footer = new JPanel();
+        footer.setBackground(ThemeManager.SIDEBAR);
+        footer.setLayout(new BoxLayout(footer, BoxLayout.Y_AXIS));
+        footer.setBorder(new EmptyBorder(15, 20, 22, 20));
 
-        JPanel panel = new JPanel();
+        JSeparator separator = new JSeparator();
+        separator.setForeground(new Color(51, 65, 85));
 
-        panel.setOpaque(false);
+        JLabel application = new JLabel("Student Registration System");
+        application.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        application.setForeground(new Color(148, 163, 184));
 
-        panel.setLayout(
-                new BoxLayout(panel, BoxLayout.Y_AXIS)
-        );
+        JLabel version = new JLabel("Version 1.0");
+        version.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        version.setForeground(new Color(100, 116, 139));
 
-        panel.setBorder(
-                BorderFactory.createEmptyBorder(
-                        15, 22, 25, 15
-                )
-        );
+        footer.add(separator);
+        footer.add(Box.createVerticalStrut(15));
+        footer.add(application);
+        footer.add(Box.createVerticalStrut(5));
+        footer.add(version);
 
-        JLabel application = new JLabel("SRMS v1.0");
-
-        application.setForeground(
-                new Color(203, 213, 225)
-        );
-
-        application.setFont(ThemeManager.FONT_MEDIUM);
-
-        JLabel institution = new JLabel(
-                "Student Administration"
-        );
-
-        institution.setForeground(
-                new Color(148, 163, 184)
-        );
-
-        institution.setFont(new Font(
-                "Segoe UI", Font.PLAIN, 11
-        ));
-
-        panel.add(application);
-
-        panel.add(Box.createVerticalStrut(5));
-
-        panel.add(institution);
-
-        return panel;
+        return footer;
     }
 }

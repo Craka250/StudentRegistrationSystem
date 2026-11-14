@@ -1,6 +1,12 @@
 
 package ke.ac.kyu.srms.ui;
 
+import ke.ac.kyu.srms.repository.DepartmentRepository;
+import ke.ac.kyu.srms.repository.ProgrammeRepository;
+import ke.ac.kyu.srms.repository.StudentRepository;
+
+import java.sql.SQLException;
+
 import ke.ac.kyu.srms.config.ThemeManager;
 import ke.ac.kyu.srms.model.Department;
 import ke.ac.kyu.srms.model.Programme;
@@ -21,13 +27,22 @@ public class MainFrame extends JFrame {
     private final List<Student> students = new ArrayList<>();
     private final List<Department> departments = new ArrayList<>();
     private final List<Programme> programmes = new ArrayList<>();
+    
+    private final StudentRepository studentRepository =
+            new StudentRepository();
+
+    private final DepartmentRepository departmentRepository =
+            new DepartmentRepository();
+
+    private final ProgrammeRepository programmeRepository =
+            new ProgrammeRepository();
 
     private DashboardPanel dashboardPanel;
     private StudentManagementPanel studentManagementPanel;
     private StudentRegistrationPanel registrationPanel;
     private DepartmentManagementPanel departmentManagementPanel;
     private ProgrammeManagementPanel programmeManagementPanel;
-
+    
     public MainFrame() {
         setTitle("Student Registration and Management System");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -37,7 +52,28 @@ public class MainFrame extends JFrame {
 
         contentPanel.setBackground(ThemeManager.BACKGROUND);
 
-        initializeAcademicData();
+        // Load permanent records before creating the UI panels.
+        try {
+            reloadDataFromDatabase();
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "The application could not connect to its database.\n\n"
+                    + "Please ensure PostgreSQL is running and the database "
+                    + "configuration is correct.\n\n"
+                    + "Technical details: " + ex.getMessage(),
+                    "Database Connection Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+
+            dispose();
+
+            throw new IllegalStateException(
+                    "Unable to initialize SRMS because the database is unavailable.",
+                    ex
+            );
+        }
+
         initializePanels();
 
         SidebarPanel sidebarPanel = new SidebarPanel(this);
@@ -49,49 +85,26 @@ public class MainFrame extends JFrame {
         showPage("dashboard");
     }
 
-    private void initializeAcademicData() {
-        Department computing = new Department(
-                "Computing and Information Technology",
-                "Academic department responsible for computing and information technology programmes."
-        );
+    private void reloadDataFromDatabase() throws SQLException {
 
-        Department business = new Department(
-                "Business and Management",
-                "Academic department responsible for business and management programmes."
-        );
+        List<Department> loadedDepartments =
+                departmentRepository.findAll();
 
-        departments.add(computing);
-        departments.add(business);
+        List<Programme> loadedProgrammes =
+                programmeRepository.findAll();
 
-        programmes.add(new Programme(
-                "Bachelor of Software Engineering",
-                computing.getId(),
-                "Undergraduate programme in software engineering."
-        ));
+        List<Student> loadedStudents =
+                studentRepository.findAll();
 
-        programmes.add(new Programme(
-                "Bachelor of Computer Science",
-                computing.getId(),
-                "Undergraduate programme in computer science."
-        ));
+        // Replace cached data only after all database reads succeed.
+        departments.clear();
+        departments.addAll(loadedDepartments);
 
-        programmes.add(new Programme(
-                "Bachelor of Information Technology",
-                computing.getId(),
-                "Undergraduate programme in information technology."
-        ));
+        programmes.clear();
+        programmes.addAll(loadedProgrammes);
 
-        programmes.add(new Programme(
-                "Diploma in Information Technology",
-                computing.getId(),
-                "Diploma programme in information technology."
-        ));
-
-        programmes.add(new Programme(
-                "Bachelor of Business Information Technology",
-                business.getId(),
-                "Undergraduate programme combining business and information technology."
-        ));
+        students.clear();
+        students.addAll(loadedStudents);
     }
 
     private void initializePanels() {
@@ -212,6 +225,7 @@ public class MainFrame extends JFrame {
     }
 
     public boolean addStudent(Student student) {
+
         if (student == null) {
             return false;
         }
@@ -219,45 +233,49 @@ public class MainFrame extends JFrame {
         String duplicateReason = findDuplicateReason(student, null);
 
         if (duplicateReason != null) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    duplicateReason,
-                    "Duplicate Student Record",
-                    JOptionPane.WARNING_MESSAGE
-            );
-            return false;
+            return showValidationError(duplicateReason);
         }
 
-        if (getProgrammeByName(student.getProgramme()) == null) {
-            JOptionPane.showMessageDialog(
-                    this,
+        Programme selectedProgramme =
+                getProgrammeByName(student.getProgramme());
+
+        if (selectedProgramme == null) {
+            return showValidationError(
                     "The selected programme is no longer available. "
-                    + "Refresh the form and select an existing programme.",
-                    "Programme Unavailable",
-                    JOptionPane.WARNING_MESSAGE
+                    + "Refresh the form and select an existing programme."
             );
-            return false;
         }
 
         String currentDepartment =
                 getDepartmentNameForProgramme(student.getProgramme());
 
-        if (currentDepartment.isBlank()) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "The selected programme is not assigned to a valid department.",
-                    "Invalid Academic Relationship",
-                    JOptionPane.WARNING_MESSAGE
+        if (currentDepartment.isBlank()
+                || !normalize(currentDepartment).equals(
+                        normalize(student.getDepartment()))) {
+
+            return showValidationError(
+                    "The selected programme and department do not match. "
+                    + "Please refresh the form and try again."
             );
-            return false;
         }
 
-        students.add(student);
+        try {
 
-        refreshStudentViews();
-        showPage("students");
+            // Save to PostgreSQL first.
+            studentRepository.save(student);
 
-        return true;
+            // Update the in-memory cache only after successful insertion.
+            students.add(student);
+
+            refreshStudentViews();
+            showPage("students");
+
+            return true;
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
+        }
     }
     
     private String findDuplicateReason(
@@ -304,20 +322,25 @@ public class MainFrame extends JFrame {
 
         return null;
     }
-    
+
     public boolean updateStudent(
             String originalRegistrationNumber,
             Student updatedStudent
     ) {
+
         if (originalRegistrationNumber == null || updatedStudent == null) {
-            return showValidationError("Invalid student information supplied.");
+            return showValidationError(
+                    "Invalid student information supplied."
+            );
         }
 
         int studentIndex = -1;
 
         for (int i = 0; i < students.size(); i++) {
+
             if (normalize(students.get(i).getRegistrationNumber())
                     .equals(normalize(originalRegistrationNumber))) {
+
                 studentIndex = i;
                 break;
             }
@@ -325,7 +348,8 @@ public class MainFrame extends JFrame {
 
         if (studentIndex == -1) {
             return showValidationError(
-                    "The student record could not be found. Refresh the table and try again."
+                    "The student record could not be found. "
+                    + "Refresh the table and try again."
             );
         }
 
@@ -338,7 +362,10 @@ public class MainFrame extends JFrame {
             return showValidationError(duplicateReason);
         }
 
-        if (getProgrammeByName(updatedStudent.getProgramme()) == null) {
+        Programme selectedProgramme =
+                getProgrammeByName(updatedStudent.getProgramme());
+
+        if (selectedProgramme == null) {
             return showValidationError(
                     "The selected programme is no longer available."
             );
@@ -347,27 +374,52 @@ public class MainFrame extends JFrame {
         String currentDepartment =
                 getDepartmentNameForProgramme(updatedStudent.getProgramme());
 
-        if (currentDepartment.isBlank()) {
+        if (currentDepartment.isBlank()
+                || !normalize(currentDepartment).equals(
+                        normalize(updatedStudent.getDepartment()))) {
+
             return showValidationError(
-                    "The selected programme is not assigned to a valid department."
+                    "The selected programme and department do not match."
             );
         }
 
-        students.set(studentIndex, updatedStudent);
+        try {
 
-        refreshStudentViews();
-        showPage("students");
+            // Use the ORIGINAL registration number to locate the DB record.
+            boolean updated = studentRepository.update(
+                    originalRegistrationNumber,
+                    updatedStudent
+            );
 
-        JOptionPane.showMessageDialog(
-                this,
-                "The student record has been updated successfully.",
-                "Update Successful",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+            if (!updated) {
+                return showValidationError(
+                        "The student record could not be updated. "
+                        + "The original record may no longer exist, "
+                        + "or the selected academic details are invalid."
+                );
+            }
 
-        return true;
+            // Update the cache only after PostgreSQL confirms success.
+            students.set(studentIndex, updatedStudent);
+
+            refreshStudentViews();
+            showPage("students");
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "The student record has been updated successfully.",
+                    "Update Successful",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+
+            return true;
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
+        }
     }
-    
+
     public boolean deleteStudent(String registrationNumber) {
 
         if (registrationNumber == null || registrationNumber.isBlank()) {
@@ -403,32 +455,64 @@ public class MainFrame extends JFrame {
             return false;
         }
 
-        students.remove(studentToDelete);
+        try {
 
-        refreshStudentViews();
-        showPage("students");
+            boolean deleted = studentRepository.delete(
+                    studentToDelete.getRegistrationNumber()
+            );
 
-        JOptionPane.showMessageDialog(
-                this,
-                "The student record has been deleted successfully.",
-                "Deletion Successful",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+            if (!deleted) {
+                return showValidationError(
+                        "The student record could not be deleted. "
+                        + "It may already have been removed."
+                );
+            }
 
-        return true;
+            students.remove(studentToDelete);
+
+            refreshStudentViews();
+            showPage("students");
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "The student record has been deleted successfully.",
+                    "Deletion Successful",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+
+            return true;
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
+        }
     }
 
     public boolean addDepartment(String name, String description) {
+
         if (isDepartmentNameTaken(name, null)) {
-            return showValidationError("A department with this name already exists.");
+            return showValidationError(
+                    "A department with this name already exists."
+            );
         }
 
         try {
-            departments.add(new Department(name, description));
-            refreshAllAcademicViews();
+
+            Department department = new Department(name, description);
+
+            departmentRepository.save(department);
+
+            refreshFromDatabase();
+
             return true;
+
         } catch (IllegalArgumentException ex) {
+
             return showValidationError(ex.getMessage());
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
         }
     }
 
@@ -437,31 +521,59 @@ public class MainFrame extends JFrame {
             String name,
             String description
     ) {
-        Department department = getDepartmentById(departmentId);
 
-        if (department == null) {
-            return showValidationError("The selected department could not be found.");
+        Department existingDepartment = getDepartmentById(departmentId);
+
+        if (existingDepartment == null) {
+            return showValidationError(
+                    "The selected department could not be found."
+            );
         }
 
         if (isDepartmentNameTaken(name, departmentId)) {
-            return showValidationError("Another department already uses this name.");
+            return showValidationError(
+                    "Another department already uses this name."
+            );
         }
 
         try {
-            department.setName(name);
-            department.setDescription(description);
-            refreshAllAcademicViews();
+
+            Department updatedDepartment = new Department(
+                    departmentId,
+                    name,
+                    description
+            );
+
+            boolean updated = departmentRepository.update(updatedDepartment);
+
+            if (!updated) {
+                return showValidationError(
+                        "The department could not be updated."
+                );
+            }
+
+            refreshFromDatabase();
+
             return true;
+
         } catch (IllegalArgumentException ex) {
+
             return showValidationError(ex.getMessage());
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
         }
     }
 
     public boolean deleteDepartment(String departmentId) {
+
         Department department = getDepartmentById(departmentId);
 
         if (department == null) {
-            return showValidationError("The selected department could not be found.");
+            return showValidationError(
+                    "The selected department could not be found."
+            );
         }
 
         boolean hasProgrammes = programmes.stream()
@@ -470,13 +582,29 @@ public class MainFrame extends JFrame {
 
         if (hasProgrammes) {
             return showValidationError(
-                    "This department cannot be deleted because it still has programmes. Move or delete its programmes first."
+                    "This department cannot be deleted because it still "
+                    + "has programmes. Move or delete its programmes first."
             );
         }
 
-        departments.remove(department);
-        refreshAllAcademicViews();
-        return true;
+        try {
+
+            boolean deleted = departmentRepository.delete(departmentId);
+
+            if (!deleted) {
+                return showValidationError(
+                        "The department could not be deleted."
+                );
+            }
+
+            refreshFromDatabase();
+
+            return true;
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
+        }
     }
 
     public boolean addProgramme(
@@ -484,6 +612,7 @@ public class MainFrame extends JFrame {
             String departmentId,
             String description
     ) {
+
         if (getDepartmentById(departmentId) == null) {
             return showValidationError(
                     "Select an existing department for this programme."
@@ -491,15 +620,32 @@ public class MainFrame extends JFrame {
         }
 
         if (isProgrammeNameTaken(name, null)) {
-            return showValidationError("A programme with this name already exists.");
+            return showValidationError(
+                    "A programme with this name already exists."
+            );
         }
 
         try {
-            programmes.add(new Programme(name, departmentId, description));
-            refreshAllAcademicViews();
+
+            Programme programme = new Programme(
+                    name,
+                    departmentId,
+                    description
+            );
+
+            programmeRepository.save(programme);
+
+            refreshFromDatabase();
+
             return true;
+
         } catch (IllegalArgumentException ex) {
+
             return showValidationError(ex.getMessage());
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
         }
     }
 
@@ -509,10 +655,13 @@ public class MainFrame extends JFrame {
             String departmentId,
             String description
     ) {
-        Programme programme = getProgrammeById(programmeId);
 
-        if (programme == null) {
-            return showValidationError("The selected programme could not be found.");
+        Programme existingProgramme = getProgrammeById(programmeId);
+
+        if (existingProgramme == null) {
+            return showValidationError(
+                    "The selected programme could not be found."
+            );
         }
 
         if (getDepartmentById(departmentId) == null) {
@@ -522,46 +671,93 @@ public class MainFrame extends JFrame {
         }
 
         if (isProgrammeNameTaken(name, programmeId)) {
-            return showValidationError("Another programme already uses this name.");
+            return showValidationError(
+                    "Another programme already uses this name."
+            );
         }
 
-        boolean hasRegisteredStudents = hasStudentsInProgramme(programme.getName());
+        boolean hasRegisteredStudents =
+                hasStudentsInProgramme(existingProgramme.getName());
 
         if (hasRegisteredStudents
-                && !normalize(programme.getName()).equals(normalize(name))) {
+                && !normalize(existingProgramme.getName()).equals(
+                        normalize(name))) {
+
             return showValidationError(
-                    "The programme name cannot be changed while students are registered under it. You may still change its department or description."
+                    "The programme name cannot be changed while students "
+                    + "are registered under it. You may still change its "
+                    + "department or description."
             );
         }
 
         try {
-            programme.setName(name);
-            programme.setDepartmentId(departmentId);
-            programme.setDescription(description);
 
-            refreshAllAcademicViews();
+            Programme updatedProgramme = new Programme(
+                    programmeId,
+                    name,
+                    departmentId,
+                    description
+            );
+
+            boolean updated = programmeRepository.update(updatedProgramme);
+
+            if (!updated) {
+                return showValidationError(
+                        "The programme could not be updated."
+                );
+            }
+
+            // Reloading also refreshes student department names if
+            // the programme has been moved to another department.
+            refreshFromDatabase();
+
             return true;
+
         } catch (IllegalArgumentException ex) {
+
             return showValidationError(ex.getMessage());
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
         }
     }
 
     public boolean deleteProgramme(String programmeId) {
+
         Programme programme = getProgrammeById(programmeId);
 
         if (programme == null) {
-            return showValidationError("The selected programme could not be found.");
+            return showValidationError(
+                    "The selected programme could not be found."
+            );
         }
 
         if (hasStudentsInProgramme(programme.getName())) {
             return showValidationError(
-                    "This programme cannot be deleted because students are registered under it."
+                    "This programme cannot be deleted because students "
+                    + "are registered under it."
             );
         }
 
-        programmes.remove(programme);
-        refreshAllAcademicViews();
-        return true;
+        try {
+
+            boolean deleted = programmeRepository.delete(programmeId);
+
+            if (!deleted) {
+                return showValidationError(
+                        "The programme could not be deleted."
+                );
+            }
+
+            refreshFromDatabase();
+
+            return true;
+
+        } catch (SQLException ex) {
+
+            return showDatabaseError(ex);
+        }
     }
 
     private boolean hasStudentsInProgramme(String programmeName) {
@@ -597,6 +793,46 @@ public class MainFrame extends JFrame {
                 JOptionPane.WARNING_MESSAGE
         );
         return false;
+    }
+
+    private boolean showDatabaseError(SQLException ex) {
+
+        String message;
+
+        if ("23505".equals(ex.getSQLState())) {
+
+            message = "This operation could not be completed because "
+                    + "a record with the same unique information already exists.\n\n"
+                    + "Please check the registration number, email address, "
+                    + "phone number, department name or programme name.";
+
+        } else if ("23503".equals(ex.getSQLState())) {
+
+            message = "This operation could not be completed because "
+                    + "the selected record is still being referenced by "
+                    + "another database record.";
+
+        } else {
+
+            message = "A database operation failed.\n\n"
+                    + "Details: " + ex.getMessage();
+        }
+
+        JOptionPane.showMessageDialog(
+                this,
+                message,
+                "Database Operation Failed",
+                JOptionPane.ERROR_MESSAGE
+        );
+
+        return false;
+    }
+
+    private void refreshFromDatabase() throws SQLException {
+
+        reloadDataFromDatabase();
+
+        refreshAllAcademicViews();
     }
 
     private String normalize(String value) {

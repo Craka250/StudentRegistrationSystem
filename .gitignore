@@ -27,3 +27,5 @@ nbdist/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+database/db.properties

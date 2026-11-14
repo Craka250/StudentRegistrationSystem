@@ -45,11 +45,19 @@
             <artifactId>ikonli-fontawesome6-pack</artifactId>
             <version>12.4.0</version>
         </dependency>
-        
+
+        <!-- LGoodDatePicker -->
         <dependency>
             <groupId>com.github.lgooddatepicker</groupId>
             <artifactId>LGoodDatePicker</artifactId>
             <version>11.2.1</version>
+        </dependency>
+
+        <!-- PostgreSQL JDBC Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.14</version>
         </dependency>
 
     </dependencies>

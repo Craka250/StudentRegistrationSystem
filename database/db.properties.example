@@ -1,0 +1,4 @@
+# PostgreSQL database configuration
+db.url=jdbc:postgresql://localhost:5432/srms_db
+db.username=srms_app
+db.password=CHANGE_ME

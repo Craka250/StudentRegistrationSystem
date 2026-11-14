@@ -9,10 +9,28 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class SidebarPanel extends JPanel {
 
     private final MainFrame mainFrame;
+
+    // Stores each navigation button using its page identifier.
+    private final Map<String, JButton> navigationButtons =
+            new LinkedHashMap<>();
+
+    // Active navigation colours.
+    private final Color ACTIVE_BACKGROUND = new Color(37, 99, 235);
+    private final Color ACTIVE_FOREGROUND = Color.WHITE;
+
+    private final Color NORMAL_FOREGROUND =
+            new Color(203, 213, 225);
+
+    private final Color HOVER_FOREGROUND =
+            new Color(255, 255, 255);
+
+    private String activePage = "dashboard";
 
     public SidebarPanel(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -24,6 +42,9 @@ public class SidebarPanel extends JPanel {
         add(createBrandPanel(), BorderLayout.NORTH);
         add(createNavigationPanel(), BorderLayout.CENTER);
         add(createFooter(), BorderLayout.SOUTH);
+
+        // Dashboard is the initial page.
+        setActivePage("dashboard");
     }
 
     private JPanel createBrandPanel() {
@@ -113,11 +134,11 @@ public class SidebarPanel extends JPanel {
     ) {
         JButton button = new JButton(
                 text,
-                FontIcon.of(iconCode, 16, new Color(203, 213, 225))
+                FontIcon.of(iconCode, 16, NORMAL_FOREGROUND)
         );
 
         button.setFont(ThemeManager.FONT_MEDIUM);
-        button.setForeground(new Color(203, 213, 225));
+        button.setForeground(NORMAL_FOREGROUND);
         button.setBackground(ThemeManager.SIDEBAR);
         button.setHorizontalAlignment(SwingConstants.LEFT);
         button.setIconTextGap(14);
@@ -126,23 +147,90 @@ public class SidebarPanel extends JPanel {
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setOpaque(true);
 
-        button.addActionListener(e -> mainFrame.showPage(page));
+        navigationButtons.put(page, button);
+
+        button.addActionListener(e -> {
+            setActivePage(page);
+            mainFrame.showPage(page);
+        });
 
         button.addMouseListener(new java.awt.event.MouseAdapter() {
+
             @Override
             public void mouseEntered(java.awt.event.MouseEvent e) {
-                button.setBackground(ThemeManager.SIDEBAR_HOVER);
+                if (!page.equals(activePage)) {
+                    button.setBackground(ThemeManager.SIDEBAR_HOVER);
+                    button.setForeground(HOVER_FOREGROUND);
+                }
             }
 
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
-                button.setBackground(ThemeManager.SIDEBAR);
+                if (!page.equals(activePage)) {
+                    button.setBackground(ThemeManager.SIDEBAR);
+                    button.setForeground(NORMAL_FOREGROUND);
+                }
             }
         });
 
         panel.add(button);
         panel.add(Box.createVerticalStrut(3));
+    }
+
+    /**
+     * Updates the persistent active navigation item.
+     */
+    public void setActivePage(String page) {
+
+        if (page == null || !navigationButtons.containsKey(page)) {
+            return;
+        }
+
+        activePage = page;
+
+        for (Map.Entry<String, JButton> entry
+                : navigationButtons.entrySet()) {
+
+            boolean isActive = entry.getKey().equals(activePage);
+            JButton button = entry.getValue();
+
+            if (isActive) {
+                button.setBackground(ACTIVE_BACKGROUND);
+                button.setForeground(ACTIVE_FOREGROUND);
+                button.setIcon(FontIcon.of(
+                        getIconForPage(entry.getKey()),
+                        16,
+                        ACTIVE_FOREGROUND
+                ));
+            } else {
+                button.setBackground(ThemeManager.SIDEBAR);
+                button.setForeground(NORMAL_FOREGROUND);
+                button.setIcon(FontIcon.of(
+                        getIconForPage(entry.getKey()),
+                        16,
+                        NORMAL_FOREGROUND
+                ));
+            }
+        }
+    }
+
+    /**
+     * Returns the icon associated with a navigation page.
+     */
+    private FontAwesomeSolid getIconForPage(String page) {
+
+        return switch (page) {
+            case "dashboard" -> FontAwesomeSolid.HOME;
+            case "students" -> FontAwesomeSolid.USERS;
+            case "registration" -> FontAwesomeSolid.USER_PLUS;
+            case "programmes" -> FontAwesomeSolid.BOOK_OPEN;
+            case "departments" -> FontAwesomeSolid.BUILDING;
+            case "reports" -> FontAwesomeSolid.CHART_LINE;
+            case "settings" -> FontAwesomeSolid.COG;
+            default -> FontAwesomeSolid.CIRCLE;
+        };
     }
 
     private JPanel createFooter() {

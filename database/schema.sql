@@ -1,16 +1,11 @@
 
--- ============================================================
 -- STUDENT REGISTRATION AND MANAGEMENT SYSTEM
 -- Database: srms_db
 -- PostgreSQL: 18+
--- ============================================================
 
-BEGIN;
+BEGI
 
--- ------------------------------------------------------------
 -- 1. DEPARTMENTS
--- ------------------------------------------------------------
-
 CREATE TABLE IF NOT EXISTS departments (
     id UUID PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
@@ -22,11 +17,7 @@ CREATE TABLE IF NOT EXISTS departments (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_departments_name
 ON departments (LOWER(TRIM(name)));
 
-
--- ------------------------------------------------------------
 -- 2. PROGRAMMES
--- ------------------------------------------------------------
-
 CREATE TABLE IF NOT EXISTS programmes (
     id UUID PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
@@ -48,10 +39,7 @@ ON programmes (LOWER(TRIM(name)), department_id);
 CREATE INDEX IF NOT EXISTS idx_programmes_department
 ON programmes (department_id);
 
-
--- ------------------------------------------------------------
 -- 3. STUDENTS
--- ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS students (
     registration_number VARCHAR(40) PRIMARY KEY,

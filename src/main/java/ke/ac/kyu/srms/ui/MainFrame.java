@@ -19,6 +19,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
+import ke.ac.kyu.srms.model.StudentPhoto;
+import ke.ac.kyu.srms.storage.StudentPhotoStorage;
+
+import java.io.File;
+import java.io.IOException;
+
 public class MainFrame extends JFrame {
 
     private final CardLayout cardLayout = new CardLayout();
@@ -30,6 +36,9 @@ public class MainFrame extends JFrame {
     
     private final StudentRepository studentRepository =
             new StudentRepository();
+    
+    private final StudentPhotoStorage studentPhotoStorage =
+        new StudentPhotoStorage();
 
     private final DepartmentRepository departmentRepository =
             new DepartmentRepository();
@@ -42,6 +51,7 @@ public class MainFrame extends JFrame {
     private StudentRegistrationPanel registrationPanel;
     private DepartmentManagementPanel departmentManagementPanel;
     private ProgrammeManagementPanel programmeManagementPanel;
+    private SidebarPanel sidebarPanel;
     
     public MainFrame() {
         setTitle("Student Registration and Management System");
@@ -75,8 +85,7 @@ public class MainFrame extends JFrame {
         }
 
         initializePanels();
-
-        SidebarPanel sidebarPanel = new SidebarPanel(this);
+        sidebarPanel = new SidebarPanel(this);
 
         setLayout(new BorderLayout());
         add(sidebarPanel, BorderLayout.WEST);
@@ -135,6 +144,10 @@ public class MainFrame extends JFrame {
 
     public void showPage(String page) {
         cardLayout.show(contentPanel, page);
+
+        if (sidebarPanel != null) {
+            sidebarPanel.setActivePage(page);
+        }
     }
     
     /**
@@ -224,7 +237,16 @@ public class MainFrame extends JFrame {
                 .toList();
     }
 
+    
     public boolean addStudent(Student student) {
+        return addStudent(student, null);
+    }
+
+    /**
+     * Registers a student and stores an optional photograph.
+     * The photograph is copied only after confirmation by the user.
+     */
+    public boolean addStudent(Student student, File photoFile) {
 
         if (student == null) {
             return false;
@@ -259,12 +281,18 @@ public class MainFrame extends JFrame {
             );
         }
 
+        StudentPhoto storedPhoto = null;
+
         try {
 
-            // Save to PostgreSQL first.
-            studentRepository.save(student);
+            // Store a photograph only when the user selected one.
+            if (photoFile != null) {
+                storedPhoto = studentPhotoStorage.store(photoFile);
+            }
 
-            // Update the in-memory cache only after successful insertion.
+            // Student and photo metadata are saved in one transaction.
+            studentRepository.saveWithPhoto(student, storedPhoto);
+
             students.add(student);
 
             refreshStudentViews();
@@ -272,12 +300,28 @@ public class MainFrame extends JFrame {
 
             return true;
 
+        } catch (IOException ex) {
+
+            if (storedPhoto != null) {
+                deleteStoredPhotoSafely(
+                        storedPhoto.getFilePath().toString()
+                );
+            }
+
+            return showPhotoStorageError(ex);
+
         } catch (SQLException ex) {
+
+            if (storedPhoto != null) {
+                deleteStoredPhotoSafely(
+                        storedPhoto.getFilePath().toString()
+                );
+            }
 
             return showDatabaseError(ex);
         }
     }
-    
+
     private String findDuplicateReason(
             Student candidate,
             String excludedRegistrationNumber
@@ -322,10 +366,28 @@ public class MainFrame extends JFrame {
 
         return null;
     }
-
+ 
     public boolean updateStudent(
             String originalRegistrationNumber,
             Student updatedStudent
+    ) {
+        return updateStudent(
+                originalRegistrationNumber,
+                updatedStudent,
+                null,
+                false
+        );
+    }
+
+    /**
+     * Updates a student while preserving, replacing or removing
+     * the existing photograph as requested.
+     */
+    public boolean updateStudent(
+            String originalRegistrationNumber,
+            Student updatedStudent,
+            File photoFile,
+            boolean removeExistingPhoto
     ) {
 
         if (originalRegistrationNumber == null || updatedStudent == null) {
@@ -383,15 +445,32 @@ public class MainFrame extends JFrame {
             );
         }
 
+        StudentPhoto storedPhoto = null;
+
         try {
 
-            // Use the ORIGINAL registration number to locate the DB record.
-            boolean updated = studentRepository.update(
-                    originalRegistrationNumber,
-                    updatedStudent
-            );
+            // Copy the replacement photograph only when one was selected.
+            if (photoFile != null) {
+                storedPhoto = studentPhotoStorage.store(photoFile);
+            }
 
-            if (!updated) {
+            // Update the student and photo metadata transactionally.
+            StudentRepository.PhotoUpdateResult result =
+                    studentRepository.updateWithPhoto(
+                            originalRegistrationNumber,
+                            updatedStudent,
+                            storedPhoto,
+                            removeExistingPhoto
+                    );
+
+            if (!result.isUpdated()) {
+
+                if (storedPhoto != null) {
+                    deleteStoredPhotoSafely(
+                            storedPhoto.getFilePath().toString()
+                    );
+                }
+
                 return showValidationError(
                         "The student record could not be updated. "
                         + "The original record may no longer exist, "
@@ -399,7 +478,12 @@ public class MainFrame extends JFrame {
                 );
             }
 
-            // Update the cache only after PostgreSQL confirms success.
+            // The database has committed. It is now safe to delete
+            // the previous photograph if it was replaced or removed.
+            if (result.getOldPhotoPath() != null) {
+                deleteStoredPhotoSafely(result.getOldPhotoPath());
+            }
+
             students.set(studentIndex, updatedStudent);
 
             refreshStudentViews();
@@ -414,7 +498,23 @@ public class MainFrame extends JFrame {
 
             return true;
 
+        } catch (IOException ex) {
+
+            if (storedPhoto != null) {
+                deleteStoredPhotoSafely(
+                        storedPhoto.getFilePath().toString()
+                );
+            }
+
+            return showPhotoStorageError(ex);
+
         } catch (SQLException ex) {
+
+            if (storedPhoto != null) {
+                deleteStoredPhotoSafely(
+                        storedPhoto.getFilePath().toString()
+                );
+            }
 
             return showDatabaseError(ex);
         }
@@ -457,15 +557,21 @@ public class MainFrame extends JFrame {
 
         try {
 
-            boolean deleted = studentRepository.delete(
-                    studentToDelete.getRegistrationNumber()
-            );
+            StudentRepository.PhotoDeleteResult result =
+                    studentRepository.deleteWithPhoto(
+                            studentToDelete.getRegistrationNumber()
+                    );
 
-            if (!deleted) {
+            if (!result.isDeleted()) {
                 return showValidationError(
                         "The student record could not be deleted. "
                         + "It may already have been removed."
                 );
+            }
+
+            // Delete the physical photograph after the database commits.
+            if (result.getOldPhotoPath() != null) {
+                deleteStoredPhotoSafely(result.getOldPhotoPath());
             }
 
             students.remove(studentToDelete);
@@ -483,7 +589,6 @@ public class MainFrame extends JFrame {
             return true;
 
         } catch (SQLException ex) {
-
             return showDatabaseError(ex);
         }
     }
@@ -792,6 +897,47 @@ public class MainFrame extends JFrame {
                 "Academic Data Validation",
                 JOptionPane.WARNING_MESSAGE
         );
+        return false;
+    }
+
+    /**
+     * Safely deletes a photograph from the application's
+     * managed storage directory.
+     *
+     * Database changes are already committed before this method
+     * is called.
+     */
+    private void deleteStoredPhotoSafely(String storedPath) {
+
+        try {
+            studentPhotoStorage.deleteStoredPhoto(storedPath);
+
+        } catch (IOException ex) {
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "The database operation succeeded, but the old "
+                    + "photograph could not be deleted automatically.\n\n"
+                    + "Details: " + ex.getMessage(),
+                    "Photograph Cleanup Warning",
+                    JOptionPane.WARNING_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Displays photograph storage errors.
+     */
+    private boolean showPhotoStorageError(IOException ex) {
+
+        JOptionPane.showMessageDialog(
+                this,
+                "The photograph could not be stored.\n\n"
+                + "Details: " + ex.getMessage(),
+                "Photograph Storage Error",
+                JOptionPane.ERROR_MESSAGE
+        );
+
         return false;
     }
 

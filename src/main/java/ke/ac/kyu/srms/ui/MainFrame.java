@@ -73,6 +73,7 @@ public class MainFrame extends JFrame {
 
         this.currentAdmin = admin;
         setTitle("Student Registration and Management System");
+        AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1050, 680));
         setSize(1250, 780);

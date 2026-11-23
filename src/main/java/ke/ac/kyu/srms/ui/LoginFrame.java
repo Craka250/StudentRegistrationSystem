@@ -38,6 +38,7 @@ public class LoginFrame extends JFrame {
     private void initializeFrame() {
 
         setTitle("Administrator Login | Student Registration System");
+        AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         setMinimumSize(new Dimension(850, 560));
@@ -80,7 +81,7 @@ public class LoginFrame extends JFrame {
         panel.add(logo, gbc);
 
         JLabel institution = new JLabel(
-                "KIRINYAGA UNIVERSITY"
+                "EXAMPLE UNIVERSITY"
         );
 
         institution.setFont(
@@ -156,7 +157,7 @@ public class LoginFrame extends JFrame {
         panel.add(featurePanel, gbc);
 
         JLabel footer = new JLabel(
-                "© 2026 Kirinyaga University | SRMS"
+                "© 2026 EXAMPLE University | SRMS"
         );
 
         footer.setFont(

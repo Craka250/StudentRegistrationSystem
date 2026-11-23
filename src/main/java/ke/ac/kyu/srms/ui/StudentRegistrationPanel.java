@@ -35,7 +35,7 @@ import javax.swing.JOptionPane;
 public class StudentRegistrationPanel extends JPanel {
 
     private final MainFrame mainFrame;
-    
+
     // Student editing mode
     private Student editingStudent;
     private JLabel headerTitle;
@@ -57,7 +57,7 @@ public class StudentRegistrationPanel extends JPanel {
 
     // Academic information
     private boolean refreshingAcademicOptions = false;
-    
+
     private JComboBox<String> programmeBox;
     private JComboBox<String> departmentBox;
     private JComboBox<Integer> yearBox;
@@ -70,6 +70,9 @@ public class StudentRegistrationPanel extends JPanel {
     private JLabel photoStatusLabel;
     private JButton removePhotoButton;
     private File selectedPhotoFile;
+    private File existingPhotoFile;
+
+    private boolean removeExistingPhoto = false;
 
     private static final long MAX_PHOTO_SIZE = 5 * 1024 * 1024;
 
@@ -414,6 +417,8 @@ public class StudentRegistrationPanel extends JPanel {
             }
 
             selectedPhotoFile = file;
+            removeExistingPhoto = false;
+
             displayStudentPhoto(image);
 
             photoStatusLabel.setText(
@@ -459,13 +464,163 @@ public class StudentRegistrationPanel extends JPanel {
     }
 
     private void removeStudentPhoto() {
-        selectedPhotoFile = null;
+
+        // Remove a newly selected photograph first.
+        if (selectedPhotoFile != null) {
+
+            selectedPhotoFile = null;
+
+            // Restore the original photograph if one exists.
+            if (existingPhotoFile != null && !removeExistingPhoto) {
+
+                try {
+                    BufferedImage image = ImageIO.read(existingPhotoFile);
+
+                    if (image != null) {
+                        displayStudentPhoto(image);
+
+                        photoStatusLabel.setText(
+                                "Current saved photograph."
+                        );
+
+                        photoStatusLabel.setForeground(
+                                ThemeManager.TEXT_SECONDARY
+                        );
+
+                        removePhotoButton.setEnabled(true);
+                        return;
+                    }
+
+                } catch (IOException ex) {
+                    // Fall through to the default preview.
+                }
+            }
+
+            resetPhotoPreview();
+
+            photoStatusLabel.setText("No photograph selected.");
+            photoStatusLabel.setForeground(
+                    ThemeManager.TEXT_SECONDARY
+            );
+
+            removePhotoButton.setEnabled(
+                    existingPhotoFile != null && !removeExistingPhoto
+            );
+
+            return;
+        }
+
+        // Mark an existing photograph for removal.
+        if (existingPhotoFile != null && !removeExistingPhoto) {
+
+            removeExistingPhoto = true;
+
+            resetPhotoPreview();
+
+            photoStatusLabel.setText(
+                    "Photograph will be removed after confirmation."
+            );
+
+            photoStatusLabel.setForeground(ThemeManager.DANGER);
+
+            removePhotoButton.setEnabled(false);
+
+            return;
+        }
+
+        // No photograph exists.
         resetPhotoPreview();
 
         photoStatusLabel.setText("No photograph selected.");
-        photoStatusLabel.setForeground(ThemeManager.TEXT_SECONDARY);
+
+        photoStatusLabel.setForeground(
+                ThemeManager.TEXT_SECONDARY
+        );
 
         removePhotoButton.setEnabled(false);
+    }
+
+    private void loadExistingStudentPhoto(String registrationNumber) {
+
+        // Reset only the form's photo state.
+        selectedPhotoFile = null;
+        existingPhotoFile = null;
+        removeExistingPhoto = false;
+
+        resetPhotoPreview();
+
+        photoStatusLabel.setText("No photograph uploaded.");
+
+        photoStatusLabel.setForeground(
+                ThemeManager.TEXT_SECONDARY
+        );
+
+        removePhotoButton.setEnabled(false);
+
+        String storedPath = mainFrame.getStudentPhotoPath(
+                registrationNumber
+        );
+
+        if (storedPath == null || storedPath.isBlank()) {
+            return;
+        }
+
+        File savedPhoto = new File(storedPath);
+
+        if (!savedPhoto.isFile()) {
+            return;
+        }
+
+        try {
+            BufferedImage image = ImageIO.read(savedPhoto);
+
+            if (image == null) {
+                return;
+            }
+
+            existingPhotoFile = savedPhoto;
+
+            displayStudentPhoto(image);
+
+            photoStatusLabel.setText("Current saved photograph.");
+
+            photoStatusLabel.setForeground(
+                    ThemeManager.SUCCESS
+            );
+
+            removePhotoButton.setEnabled(true);
+
+        } catch (IOException ex) {
+
+            photoStatusLabel.setText(
+                    "Unable to load saved photograph."
+            );
+
+            photoStatusLabel.setForeground(
+                    ThemeManager.DANGER
+            );
+        }
+    }
+
+    private void resetPhotoState() {
+
+        selectedPhotoFile = null;
+        existingPhotoFile = null;
+        removeExistingPhoto = false;
+
+        resetPhotoPreview();
+
+        if (photoStatusLabel != null) {
+            photoStatusLabel.setText("No photograph selected.");
+
+            photoStatusLabel.setForeground(
+                    ThemeManager.TEXT_SECONDARY
+            );
+        }
+
+        if (removePhotoButton != null) {
+            removePhotoButton.setEnabled(false);
+        }
     }
 
     private void resetPhotoPreview() {
@@ -950,7 +1105,7 @@ public class StudentRegistrationPanel extends JPanel {
             validateComponent(component);
         }
     }
-    
+
         /**
         * Loads an existing student into the registration form
         * and switches the panel into edit mode.
@@ -997,9 +1152,8 @@ public class StudentRegistrationPanel extends JPanel {
            // Admission information
            admissionDatePicker.setDate(student.getAdmissionDate());
 
-           // Student photos are not currently stored in the Student model.
-           // Therefore, the existing photo cannot be preloaded here.
-           removeStudentPhoto();
+           // Load the student's existing photograph from storage.
+           loadExistingStudentPhoto(student.getRegistrationNumber());
 
            // Clear previous validation messages.
            for (JLabel label : errorLabels.values()) {
@@ -1029,7 +1183,7 @@ public class StudentRegistrationPanel extends JPanel {
            // Bring the registration number into view.
            registrationField.requestFocusInWindow();
        }
-       
+
     /**
     * Cancels editing and returns the form to new-registration mode.
     */
@@ -1068,7 +1222,7 @@ public class StudentRegistrationPanel extends JPanel {
 
        mainFrame.showPage("students");
    }
-   
+
    /**
     * Resets all form fields without displaying a confirmation dialog.
     */
@@ -1096,7 +1250,7 @@ public class StudentRegistrationPanel extends JPanel {
 
        admissionDatePicker.setDate(LocalDate.now());
 
-       removeStudentPhoto();
+       resetPhotoState();
 
        for (JLabel label : errorLabels.values()) {
            label.setText(" ");
@@ -1104,7 +1258,7 @@ public class StudentRegistrationPanel extends JPanel {
 
        updateProgress();
    }
-   
+
     private JPanel createActionSection() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
@@ -1364,7 +1518,7 @@ public class StudentRegistrationPanel extends JPanel {
                 "^(?:\\+254|254|0)(?:7|1)\\d{8}$"
         );
     }
-    
+
     private void validateAndPreview() {
         if (!validateAllFields()) {
             JOptionPane.showMessageDialog(
@@ -1391,21 +1545,32 @@ public class StudentRegistrationPanel extends JPanel {
                 admissionDatePicker.getDate()
         );
 
+        // Determine which photograph should appear in the review.
+        File reviewPhoto = selectedPhotoFile != null
+                ? selectedPhotoFile
+                : (removeExistingPhoto ? null : existingPhotoFile);
+
         StudentReviewDialog reviewDialog = new StudentReviewDialog(
                 SwingUtilities.getWindowAncestor(this),
                 student,
-                selectedPhotoFile,
+                reviewPhoto,
                 confirmedStudent -> {
 
                     // Normal new-student registration.
                     if (editingStudent == null) {
-                        return mainFrame.addStudent(confirmedStudent);
+
+                        return mainFrame.addStudent(
+                                confirmedStudent,
+                                selectedPhotoFile
+                        );
                     }
 
-                    // Update the existing student.
+                    // Update an existing student.
                     boolean updated = mainFrame.updateStudent(
                             editingStudent.getRegistrationNumber(),
-                            confirmedStudent
+                            confirmedStudent,
+                            selectedPhotoFile,
+                            removeExistingPhoto
                     );
 
                     if (updated) {
@@ -1428,7 +1593,9 @@ public class StudentRegistrationPanel extends JPanel {
                                 "Student information updated successfully."
                         );
 
-                        statusLabel.setForeground(ThemeManager.SUCCESS);
+                        statusLabel.setForeground(
+                                ThemeManager.SUCCESS
+                        );
 
                         mainFrame.showPage("students");
                     }
@@ -1474,7 +1641,7 @@ public class StudentRegistrationPanel extends JPanel {
 
         admissionDatePicker.setDate(LocalDate.now());
 
-        removeStudentPhoto();
+        resetPhotoState();
 
         for (JLabel label : errorLabels.values()) {
             label.setText(" ");

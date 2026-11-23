@@ -1,6 +1,9 @@
 
 package ke.ac.kyu.srms.ui;
 
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+
 import ke.ac.kyu.srms.repository.DepartmentRepository;
 import ke.ac.kyu.srms.repository.ProgrammeRepository;
 import ke.ac.kyu.srms.repository.StudentRepository;
@@ -33,10 +36,10 @@ public class MainFrame extends JFrame {
     private final List<Student> students = new ArrayList<>();
     private final List<Department> departments = new ArrayList<>();
     private final List<Programme> programmes = new ArrayList<>();
-    
+
     private final StudentRepository studentRepository =
             new StudentRepository();
-    
+
     private final StudentPhotoStorage studentPhotoStorage =
         new StudentPhotoStorage();
 
@@ -51,8 +54,9 @@ public class MainFrame extends JFrame {
     private StudentRegistrationPanel registrationPanel;
     private DepartmentManagementPanel departmentManagementPanel;
     private ProgrammeManagementPanel programmeManagementPanel;
+    private ReportsPanel reportsPanel;
     private SidebarPanel sidebarPanel;
-    
+
     public MainFrame() {
         setTitle("Student Registration and Management System");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -122,6 +126,7 @@ public class MainFrame extends JFrame {
         registrationPanel = new StudentRegistrationPanel(this);
         departmentManagementPanel = new DepartmentManagementPanel(this);
         programmeManagementPanel = new ProgrammeManagementPanel(this);
+        reportsPanel = new ReportsPanel(this);
 
         contentPanel.add(dashboardPanel, "dashboard");
         contentPanel.add(studentManagementPanel, "students");
@@ -129,10 +134,13 @@ public class MainFrame extends JFrame {
         contentPanel.add(programmeManagementPanel, "programmes");
         contentPanel.add(departmentManagementPanel, "departments");
 
+        /*
         contentPanel.add(
                 createPlaceholder("Reports", "Reports and analytics will be implemented here."),
                 "reports"
-        );
+        ); */
+
+        contentPanel.add(reportsPanel, "reports");
 
         contentPanel.add(
                 createPlaceholder("Settings", "Application settings will be implemented here."),
@@ -149,7 +157,7 @@ public class MainFrame extends JFrame {
             sidebarPanel.setActivePage(page);
         }
     }
-    
+
     /**
     * Opens the student registration form in edit mode
     * and loads the selected student's existing details.
@@ -237,7 +245,7 @@ public class MainFrame extends JFrame {
                 .toList();
     }
 
-    
+
     public boolean addStudent(Student student) {
         return addStudent(student, null);
     }
@@ -366,7 +374,7 @@ public class MainFrame extends JFrame {
 
         return null;
     }
- 
+
     public boolean updateStudent(
             String originalRegistrationNumber,
             Student updatedStudent
@@ -865,6 +873,18 @@ public class MainFrame extends JFrame {
         }
     }
 
+    public String getStudentPhotoPath(String registrationNumber) {
+        try {
+            return studentRepository.findPhotoPathByRegistrationNumber(
+                    registrationNumber
+            );
+
+        } catch (SQLException ex) {
+            showDatabaseError(ex);
+            return null;
+        }
+    }
+
     private boolean hasStudentsInProgramme(String programmeName) {
         return students.stream().anyMatch(student ->
                 normalize(student.getProgramme()).equals(normalize(programmeName)));
@@ -1051,12 +1071,18 @@ public class MainFrame extends JFrame {
     }
 
     private void refreshDashboard() {
+
         if (dashboardPanel != null) {
             dashboardPanel.updateStatistics(
                     students,
                     programmes,
                     departments
             );
+        }
+
+        // Keep reports and analytics synchronized with database records.
+        if (reportsPanel != null) {
+            reportsPanel.refreshData();
         }
     }
 
@@ -1084,5 +1110,53 @@ public class MainFrame extends JFrame {
 
         panel.add(content);
         return panel;
+    }
+
+    /**
+     * Safely logs out the currently authenticated administrator.
+     *
+     * Displays a confirmation dialog before closing the dashboard
+     * and returning to the administrator login screen.
+     */
+    public void logout() {
+
+        Object[] options = {
+            "Log Out",
+            "Stay Logged In"
+        };
+
+        int choice = JOptionPane.showOptionDialog(
+                this,
+                "Are you sure you want to log out?\n\n"
+                + "You will need to sign in again to access the system.",
+                "Confirm Logout",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[1]
+        );
+
+        // Cancel or stay logged in.
+        if (choice != 0) {
+            return;
+        }
+
+        // Close the current dashboard.
+        dispose();
+
+        // Return to the administrator login screen.
+        SwingUtilities.invokeLater(() -> {
+
+            LoginFrame loginFrame = new LoginFrame(admin -> {
+
+                MainFrame newMainFrame = new MainFrame();
+
+                newMainFrame.setVisible(true);
+
+            });
+
+            loginFrame.setVisible(true);
+        });
     }
 }

@@ -29,3 +29,6 @@ nbdist/
 Thumbs.db
 
 database/db.properties
+
+# Local PostgreSQL database backups
+database/*.backup

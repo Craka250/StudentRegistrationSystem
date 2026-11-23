@@ -1121,4 +1121,18 @@ public class StudentManagementPanel extends JPanel {
         tableContentPanel.revalidate();
         tableContentPanel.repaint();
     }
+    
+    /**
+    * Allows the dashboard to use the existing student search.
+    * Existing filters are preserved.
+    */
+   public void searchFromDashboard(String query) {
+       String searchQuery = query == null ? "" : query.trim();
+
+       searchField.setText(searchQuery);
+       searchField.requestFocusInWindow();
+       searchField.setCaretPosition(searchField.getText().length());
+
+       // The existing DocumentListener automatically applies the filters.
+   }
 }

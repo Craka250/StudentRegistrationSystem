@@ -3,6 +3,9 @@ package ke.ac.kyu.srms.ui;
 
 import ke.ac.kyu.srms.config.ThemeManager;
 import ke.ac.kyu.srms.model.Student;
+import ke.ac.kyu.srms.model.Programme;
+import ke.ac.kyu.srms.model.Department;
+import ke.ac.kyu.srms.model.AuditLog;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -11,13 +14,8 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.time.LocalDate;
-import java.util.HashSet;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-
-import ke.ac.kyu.srms.model.Programme;
-import ke.ac.kyu.srms.model.Department;
 
 public class DashboardPanel extends JPanel {
 
@@ -29,6 +27,11 @@ public class DashboardPanel extends JPanel {
     private JLabel departmentsValue;
     private JLabel newRegistrationsDescription;
 
+    private JPanel activityRows;
+
+    private static final DateTimeFormatter ACTIVITY_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
+
     public DashboardPanel(MainFrame mainFrame) {
 
         this.mainFrame = mainFrame;
@@ -39,13 +42,10 @@ public class DashboardPanel extends JPanel {
         add(createHeader(), BorderLayout.NORTH);
         add(createDashboardContent(), BorderLayout.CENTER);
 
-        // Display correct zero values until the student list is supplied.
         updateStatistics(List.of());
+        updateRecentActivities(List.of());
     }
 
-    /**
-     * Refreshes all dashboard statistics using the central student list.
-     */
     public void updateStatistics(List<Student> students) {
         updateStatistics(students, List.of(), List.of());
     }
@@ -100,11 +100,39 @@ public class DashboardPanel extends JPanel {
         repaint();
     }
 
-    private String normalize(String value) {
+    /**
+     * Refreshes the recent activity section using audit records.
+     */
+    public void updateRecentActivities(List<AuditLog> activities) {
 
-        return value.trim()
-                .replaceAll("\\s+", " ")
-                .toLowerCase(Locale.ROOT);
+        if (activityRows == null) {
+            return;
+        }
+
+        activityRows.removeAll();
+
+        if (activities == null || activities.isEmpty()) {
+
+            JLabel emptyMessage = new JLabel(
+                    "No recent activities to display."
+            );
+
+            emptyMessage.setFont(ThemeManager.FONT_REGULAR);
+            emptyMessage.setForeground(ThemeManager.TEXT_SECONDARY);
+
+            activityRows.add(emptyMessage);
+
+        } else {
+
+            for (AuditLog activity : activities) {
+                if (activity != null) {
+                    activityRows.add(createActivityRow(activity));
+                }
+            }
+        }
+
+        activityRows.revalidate();
+        activityRows.repaint();
     }
 
     private JPanel createHeader() {
@@ -146,6 +174,14 @@ public class DashboardPanel extends JPanel {
         searchField.setPreferredSize(new Dimension(210, 38));
         searchField.setFont(ThemeManager.FONT_REGULAR);
 
+        searchField.addActionListener(e -> {
+            String query = searchField.getText().trim();
+
+            if (!query.isEmpty()) {
+                mainFrame.searchStudents(query);
+            }
+        });
+
         JButton notificationButton = new JButton(
                 FontIcon.of(
                         FontAwesomeSolid.BELL,
@@ -162,6 +198,8 @@ public class DashboardPanel extends JPanel {
         notificationButton.setCursor(
                 Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         );
+
+        notificationButton.addActionListener(e -> showNotifications());
 
         actions.add(searchField);
         actions.add(notificationButton);
@@ -365,7 +403,7 @@ public class DashboardPanel extends JPanel {
 
     private JPanel createActivitySection() {
 
-        JPanel section = new JPanel(new BorderLayout());
+        JPanel section = new JPanel(new BorderLayout(0, 14));
         section.setBackground(Color.WHITE);
         section.setBorder(
                 BorderFactory.createCompoundBorder(
@@ -377,7 +415,7 @@ public class DashboardPanel extends JPanel {
         );
 
         section.setMaximumSize(
-                new Dimension(Integer.MAX_VALUE, 165)
+                new Dimension(Integer.MAX_VALUE, 220)
         );
         section.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -385,21 +423,239 @@ public class DashboardPanel extends JPanel {
         title.setFont(ThemeManager.FONT_SUBHEADING);
         title.setForeground(ThemeManager.TEXT_PRIMARY);
 
-        JLabel emptyMessage = new JLabel(
-                "No recent student activities to display."
+        activityRows = new JPanel();
+        activityRows.setOpaque(false);
+        activityRows.setLayout(
+                new BoxLayout(activityRows, BoxLayout.Y_AXIS)
         );
-        emptyMessage.setFont(ThemeManager.FONT_REGULAR);
-        emptyMessage.setForeground(
-                ThemeManager.TEXT_SECONDARY
+
+        JScrollPane scrollPane = new JScrollPane(activityRows);
+        scrollPane.setBorder(null);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setHorizontalScrollBarPolicy(
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
         );
-        emptyMessage.setHorizontalAlignment(
-                SwingConstants.CENTER
+        scrollPane.setVerticalScrollBarPolicy(
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         );
 
         section.add(title, BorderLayout.NORTH);
-        section.add(emptyMessage, BorderLayout.CENTER);
+        section.add(scrollPane, BorderLayout.CENTER);
 
         return section;
+    }
+
+    private JPanel createActivityRow(AuditLog activity) {
+
+        JPanel row = new JPanel(new BorderLayout(12, 4));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(7, 0, 7, 0));
+        row.setMaximumSize(
+                new Dimension(Integer.MAX_VALUE, 55)
+        );
+
+        JLabel icon = new JLabel(
+                FontIcon.of(
+                        getActivityIcon(activity),
+                        15,
+                        ThemeManager.PRIMARY
+                )
+        );
+
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(
+                new BoxLayout(text, BoxLayout.Y_AXIS)
+        );
+
+        JLabel description = new JLabel(
+                describeActivity(activity)
+        );
+        description.setFont(ThemeManager.FONT_MEDIUM);
+        description.setForeground(ThemeManager.TEXT_PRIMARY);
+
+        String username = activity.adminUsername() == null
+                || activity.adminUsername().isBlank()
+                ? "Administrator"
+                : activity.adminUsername();
+
+        JLabel actor = new JLabel("By " + username);
+        actor.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        actor.setForeground(ThemeManager.TEXT_SECONDARY);
+
+        text.add(description);
+        text.add(Box.createVerticalStrut(3));
+        text.add(actor);
+
+        JLabel timestamp = new JLabel(
+                activity.createdAt() == null
+                        ? ""
+                        : activity.createdAt().format(ACTIVITY_DATE_FORMAT)
+        );
+        timestamp.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        timestamp.setForeground(ThemeManager.TEXT_SECONDARY);
+
+        row.add(icon, BorderLayout.WEST);
+        row.add(text, BorderLayout.CENTER);
+        row.add(timestamp, BorderLayout.EAST);
+
+        return row;
+    }
+
+    private FontAwesomeSolid getActivityIcon(AuditLog activity) {
+
+        String entity = safeUpper(activity.entityType());
+        String action = safeUpper(activity.action());
+
+        if ("STUDENT".equals(entity)) {
+            return "DELETE".equals(action)
+                    ? FontAwesomeSolid.USER_MINUS
+                    : FontAwesomeSolid.USER;
+        }
+
+        if ("DEPARTMENT".equals(entity)) {
+            return FontAwesomeSolid.BUILDING;
+        }
+
+        if ("PROGRAMME".equals(entity)) {
+            return FontAwesomeSolid.BOOK_OPEN;
+        }
+
+        return FontAwesomeSolid.CLIPBOARD_LIST;
+    }
+
+    private String describeActivity(AuditLog activity) {
+
+        String action = safeUpper(activity.action());
+        String entity = safeUpper(activity.entityType());
+
+        String verb = switch (action) {
+            case "CREATE", "INSERT" -> "created";
+            case "UPDATE", "EDIT" -> "updated";
+            case "DELETE", "REMOVE" -> "deleted";
+            case "LOGIN" -> "signed in";
+            case "LOGOUT" -> "signed out";
+            default -> action.isBlank()
+                    ? "performed an action on"
+                    : action.toLowerCase();
+        };
+
+        if ("LOGIN".equals(action) || "LOGOUT".equals(action)) {
+            return "Administrator " + verb;
+        }
+
+        String entityName = switch (entity) {
+            case "STUDENT" -> "student record";
+            case "DEPARTMENT" -> "department";
+            case "PROGRAMME" -> "programme";
+            default -> entity.isBlank()
+                    ? "record"
+                    : entity.toLowerCase() + " record";
+        };
+
+        return "Administrator " + verb + " " + entityName;
+    }
+
+    private String safeUpper(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
+    }
+
+    private void showNotifications() {
+
+        List<AuditLog> notifications =
+                mainFrame.getRecentActivities(20);
+
+        JPanel content = new JPanel();
+        content.setLayout(
+                new BoxLayout(content, BoxLayout.Y_AXIS)
+        );
+        content.setBorder(new EmptyBorder(8, 8, 8, 8));
+        content.setBackground(Color.WHITE);
+
+        if (notifications.isEmpty()) {
+
+            JLabel empty = new JLabel(
+                    "There are no notifications yet."
+            );
+            empty.setFont(ThemeManager.FONT_REGULAR);
+            empty.setForeground(ThemeManager.TEXT_SECONDARY);
+            content.add(empty);
+
+        } else {
+
+            for (AuditLog activity : notifications) {
+                content.add(createNotificationRow(activity));
+                content.add(Box.createVerticalStrut(5));
+            }
+        }
+
+        JScrollPane scrollPane = new JScrollPane(content);
+        scrollPane.setPreferredSize(new Dimension(530, 360));
+        scrollPane.setBorder(
+                BorderFactory.createLineBorder(
+                        new Color(226, 232, 240)
+                )
+        );
+
+        JOptionPane.showMessageDialog(
+                this,
+                scrollPane,
+                "Recent Notifications",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private JPanel createNotificationRow(AuditLog activity) {
+
+        JPanel row = new JPanel(new BorderLayout(10, 4));
+        row.setBackground(Color.WHITE);
+        row.setBorder(
+                new EmptyBorder(10, 8, 10, 8)
+        );
+
+        JLabel description = new JLabel(
+                describeActivity(activity)
+        );
+        description.setFont(ThemeManager.FONT_MEDIUM);
+        description.setForeground(ThemeManager.TEXT_PRIMARY);
+
+        String username = activity.adminUsername() == null
+                || activity.adminUsername().isBlank()
+                ? "Administrator"
+                : activity.adminUsername();
+
+        String timestamp = activity.createdAt() == null
+                ? ""
+                : activity.createdAt().format(ACTIVITY_DATE_FORMAT);
+
+        JLabel details = new JLabel(
+                "By " + username + (timestamp.isBlank() ? "" : "  •  " + timestamp)
+        );
+        details.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        details.setForeground(ThemeManager.TEXT_SECONDARY);
+
+        JPanel labels = new JPanel();
+        labels.setOpaque(false);
+        labels.setLayout(
+                new BoxLayout(labels, BoxLayout.Y_AXIS)
+        );
+
+        labels.add(description);
+        labels.add(Box.createVerticalStrut(4));
+        labels.add(details);
+
+        row.add(
+                new JLabel(FontIcon.of(
+                        getActivityIcon(activity),
+                        16,
+                        ThemeManager.PRIMARY
+                )),
+                BorderLayout.WEST
+        );
+        row.add(labels, BorderLayout.CENTER);
+
+        return row;
     }
 
     private JPanel createQuickActions() {

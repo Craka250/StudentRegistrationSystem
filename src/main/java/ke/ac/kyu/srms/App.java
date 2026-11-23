@@ -22,10 +22,10 @@ public class App {
 
             LoginFrame loginFrame = new LoginFrame(admin -> {
 
-                MainFrame mainFrame = new MainFrame();
+                // Preserve the authenticated administrator.
+                MainFrame mainFrame = new MainFrame(admin);
 
                 mainFrame.setVisible(true);
-
             });
 
             loginFrame.setVisible(true);

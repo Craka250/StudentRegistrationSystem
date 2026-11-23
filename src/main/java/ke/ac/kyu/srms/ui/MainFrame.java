@@ -15,6 +15,10 @@ import ke.ac.kyu.srms.model.Department;
 import ke.ac.kyu.srms.model.Programme;
 import ke.ac.kyu.srms.model.Student;
 
+import ke.ac.kyu.srms.model.Admin;
+import ke.ac.kyu.srms.model.AuditLog;
+import ke.ac.kyu.srms.repository.AuditLogRepository;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
@@ -48,6 +52,10 @@ public class MainFrame extends JFrame {
 
     private final ProgrammeRepository programmeRepository =
             new ProgrammeRepository();
+    
+    private final Admin currentAdmin;
+    private final AuditLogRepository auditLogRepository =
+            new AuditLogRepository();
 
     private DashboardPanel dashboardPanel;
     private StudentManagementPanel studentManagementPanel;
@@ -58,6 +66,12 @@ public class MainFrame extends JFrame {
     private SidebarPanel sidebarPanel;
 
     public MainFrame() {
+        this(null);
+    }
+
+    public MainFrame(Admin admin) {
+
+        this.currentAdmin = admin;
         setTitle("Student Registration and Management System");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1050, 680));
@@ -301,6 +315,9 @@ public class MainFrame extends JFrame {
             // Student and photo metadata are saved in one transaction.
             studentRepository.saveWithPhoto(student, storedPhoto);
 
+            // Record the successful registration.
+            logActivity("CREATE", "STUDENT", null);
+
             students.add(student);
 
             refreshStudentViews();
@@ -492,6 +509,9 @@ public class MainFrame extends JFrame {
                 deleteStoredPhotoSafely(result.getOldPhotoPath());
             }
 
+            // Record the successful update without storing student details.
+            logActivity("UPDATE", "STUDENT", null);
+
             students.set(studentIndex, updatedStudent);
 
             refreshStudentViews();
@@ -582,6 +602,9 @@ public class MainFrame extends JFrame {
                 deleteStoredPhotoSafely(result.getOldPhotoPath());
             }
 
+            // Record the successful deletion.
+            logActivity("DELETE", "STUDENT", null);
+
             students.remove(studentToDelete);
 
             refreshStudentViews();
@@ -614,6 +637,8 @@ public class MainFrame extends JFrame {
             Department department = new Department(name, description);
 
             departmentRepository.save(department);
+
+            logActivity("CREATE", "DEPARTMENT", department.getId());
 
             refreshFromDatabase();
 
@@ -665,6 +690,8 @@ public class MainFrame extends JFrame {
                 );
             }
 
+            logActivity("UPDATE", "DEPARTMENT", departmentId);
+
             refreshFromDatabase();
 
             return true;
@@ -710,6 +737,8 @@ public class MainFrame extends JFrame {
                 );
             }
 
+            logActivity("DELETE", "DEPARTMENT", departmentId);
+
             refreshFromDatabase();
 
             return true;
@@ -747,6 +776,8 @@ public class MainFrame extends JFrame {
             );
 
             programmeRepository.save(programme);
+
+            logActivity("CREATE", "PROGRAMME", programme.getId());
 
             refreshFromDatabase();
 
@@ -820,6 +851,8 @@ public class MainFrame extends JFrame {
                 );
             }
 
+            logActivity("UPDATE", "PROGRAMME", programmeId);
+
             // Reloading also refreshes student department names if
             // the programme has been moved to another department.
             refreshFromDatabase();
@@ -862,6 +895,8 @@ public class MainFrame extends JFrame {
                         "The programme could not be deleted."
                 );
             }
+
+            logActivity("DELETE", "PROGRAMME", programmeId);
 
             refreshFromDatabase();
 
@@ -1069,14 +1104,79 @@ public class MainFrame extends JFrame {
 
         refreshDashboard();
     }
+    
+    /**
+    * Records an administrative action without interrupting the
+    * main database operation if audit logging fails.
+    */
+   private void logActivity(
+           String action,
+           String entityType,
+           String entityId
+   ) {
+       try {
+           auditLogRepository.logActivity(
+                   currentAdmin,
+                   action,
+                   entityType,
+                   entityId,
+                   null
+           );
+
+       } catch (SQLException ex) {
+           System.err.println(
+                   "Audit logging failed: " + ex.getMessage()
+           );
+       }
+   }
+
+   /**
+    * Returns the most recent audit records for the dashboard
+    * and notifications window.
+    */
+   public List<AuditLog> getRecentActivities(int limit) {
+
+       try {
+           return auditLogRepository.findRecent(limit);
+
+       } catch (SQLException ex) {
+
+           System.err.println(
+                   "Could not load recent activities: "
+                   + ex.getMessage()
+           );
+
+           return Collections.emptyList();
+       }
+   }
+
+   /**
+    * Opens the existing student management page and applies
+    * the dashboard search through its existing search field.
+    */
+   public void searchStudents(String query) {
+
+       if (studentManagementPanel == null) {
+           return;
+       }
+
+       studentManagementPanel.searchFromDashboard(query);
+       showPage("students");
+   }
 
     private void refreshDashboard() {
 
         if (dashboardPanel != null) {
+
             dashboardPanel.updateStatistics(
                     students,
                     programmes,
                     departments
+            );
+
+            // Refresh the recent activity feed from PostgreSQL.
+            dashboardPanel.updateRecentActivities(
+                    getRecentActivities(8)
             );
         }
 
@@ -1150,7 +1250,7 @@ public class MainFrame extends JFrame {
 
             LoginFrame loginFrame = new LoginFrame(admin -> {
 
-                MainFrame newMainFrame = new MainFrame();
+                MainFrame newMainFrame = new MainFrame(admin);
 
                 newMainFrame.setVisible(true);
 
